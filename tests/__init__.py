@@ -1,0 +1,3 @@
+from tests.test_ixmas_multiclip import TestIXMASMulticlip
+
+TestIXMASMulticlip()
