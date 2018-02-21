@@ -5,10 +5,10 @@ import random
 import shutil
 import tarfile
 import numpy as np
-from skimage import io
-from skimage.transform import resize
 from concurrent.futures import ThreadPoolExecutor
 from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
+from PIL import Image
 from urllib.request import urlretrieve
 
 
@@ -163,20 +163,11 @@ class IXMASMulticlip:
 
     def get_triplet_indexes(self, num_frames):
         max_bound = self.frame_depth - num_frames
-
-        if max_bound<0:
-            print("AHHHHH")
-
         anchor_index = random.randint(0, max_bound)
         anchor_end = anchor_index + num_frames
 
         low_bound = 0 if (self.frame_depth - anchor_end) / num_frames < 1 else anchor_end
         max_bound = (self.frame_depth - num_frames) if low_bound == 0 else max_bound
-
-
-        if(low_bound<0 or max_bound<0):
-            print("AHHHHH")
-
         negative_index = random.randint(low_bound, max_bound)
 
         return [anchor_index, anchor_index, negative_index]
@@ -187,15 +178,29 @@ class IXMASMulticlip:
         positive = self.get_subclip(1, num_frames, indexes[1])
         negative = self.get_subclip(0, num_frames, indexes[2])
 
-        return torch.cat((anchor, positive, negative),0)
+        return torch.cat((anchor, positive, negative), 0)
 
     def get_subclip(self, view, num_frames, frame_start):
         frame_set = self._frame_paths[view][frame_start:frame_start + num_frames]
         return self.load_frames(frame_set)
 
     def load_frames(self, frame_set):
-        frames = np.array([resize(io.imread(frame), output_shape=(291, 390), preserve_range=True) for frame in frame_set])
-        frames = frames.transpose(3, 0, 1, 2)
-        frames = np.expand_dims(frames, axis=0)
-        frames = np.float32(frames)
-        return torch.from_numpy(frames)
+        preprocess = transforms.Compose([
+            transforms.Scale(256),
+            transforms.CenterCrop(240),
+            transforms.Resize(24),
+            transforms.ToTensor()])
+
+        frames = None
+        for frame in frame_set:
+            img = preprocess(Image.open(frame))
+            img = img.unsqueeze(0)
+            if frames is None:
+                frames = img
+            else:
+                frames = torch.cat((frames, img))
+
+        frames = torch.transpose(frames, 0, 1)
+        frames = frames.unsqueeze(0)
+
+        return frames

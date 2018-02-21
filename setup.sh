@@ -11,6 +11,3 @@ virtualenv --system-site-packages -p python3 ./CVEnv
 source ./CVEnv/bin/activate
 
 sudo pip3 install -r requirements.txt
-
-#chmod a+x ixmas_setup.sh
-#./ixmas_setup 

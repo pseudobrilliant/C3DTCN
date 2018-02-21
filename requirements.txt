@@ -1,6 +1,4 @@
-jupyter
 numpy
-pandas
 matplotlib
 ipython[all]
 scikit-image
