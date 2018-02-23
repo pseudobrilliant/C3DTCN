@@ -133,10 +133,10 @@ class IXMASDataset(Dataset):
                 for j in range(5):
                     for k in range(5):
                         if k != j:
-                            multi_clip[multi_index].add_frame(0, os.path.join(path, *["cam" + str(j),
+                            multi_clip[multi_index].add_frame(0, j, os.path.join(path, *["cam" + str(j),
                                                                                       "img{}.png".format(
                                                                                           format(i, '04d'))]))
-                            multi_clip[multi_index].add_frame(1, os.path.join(path, *["cam" + str(k),
+                            multi_clip[multi_index].add_frame(1, k, os.path.join(path, *["cam" + str(k),
                                                                                       "img{}.png".format(
                                                                                           format(i, '04d'))]))
                             multi_index += 1
@@ -155,8 +155,10 @@ class IXMASMulticlip:
     def frame_depth(self):
         return len(self._frame_paths[0])
 
-    def add_frame(self, camera, frame):
-        self._frame_paths[camera].append(frame)
+    def add_frame(self, placement, camera, frame):
+
+        self._cameras[placement] = camera
+        self._frame_paths[placement].append(frame)
 
     def get_label(self):
         return self._label
@@ -186,9 +188,8 @@ class IXMASMulticlip:
 
     def load_frames(self, frame_set):
         preprocess = transforms.Compose([
-            transforms.Scale(256),
-            transforms.CenterCrop(240),
-            transforms.Resize(24),
+            transforms.CenterCrop(224),
+            transforms.Resize(112),
             transforms.ToTensor()])
 
         frames = None
