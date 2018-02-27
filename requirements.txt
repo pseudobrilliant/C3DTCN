@@ -4,3 +4,4 @@ ipython[all]
 scikit-image
 torch
 torchvision
+progressbar2
