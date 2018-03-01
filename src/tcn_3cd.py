@@ -40,7 +40,7 @@ class C3DTCN(nn.Module):
         self.conv5b = nn.Conv3d(512, 512, kernel_size=(3, 3, 3), padding=(1, 1, 1))
         self.pool5 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
 
-        self.fc1 = nn.Linear(9216, 4096)
+        self.fc1 = nn.Linear(8192, 4096)
         self.fc2 = nn.Linear(4096, 4096)
         self.fc3 = nn.Linear(4096, 512)
 
@@ -70,7 +70,7 @@ class C3DTCN(nn.Module):
         l = self.relu(self.conv5b(l))
         l = self.pool5(l)
 
-        l = l.view(-1, 9216)
+        l = l.view(-1, 8192)
         l = self.relu(self.fc1(l))
         l = self.dropout(l)
         l = self.relu(self.fc2(l))
@@ -115,9 +115,6 @@ class C3DTCN(nn.Module):
     @staticmethod
     def tcn_batch(batch, tcn, cuda):
 
-        positive_distance = None
-        negative_distance = None
-
         frames = Variable(batch)
 
         if cuda:
@@ -130,10 +127,6 @@ class C3DTCN(nn.Module):
         positive_distance = euclidean(anchor_results, positive_results)
         negative_distance = euclidean(anchor_results, negative_results)
 
-        del anchor_results, positive_results, negative_results, frames
-        torch.cuda.empty_cache()
-        gc.collect()
-
         return positive_distance, negative_distance
 
     @staticmethod
@@ -141,6 +134,7 @@ class C3DTCN(nn.Module):
         cuda = torch.cuda.is_available()
 
         batch_size = int(tcn_settings["batch"])
+        margin = float(tcn_settings["margin"])
 
         data_loader = DataLoader(
             dataset=dataset,
@@ -149,18 +143,20 @@ class C3DTCN(nn.Module):
             pin_memory=cuda
         )
 
+        torch.cuda.empty_cache()
+        gc.collect()
+
         num_correct = 0
         for batch in data_loader:
 
             batch_positive, batch_negative = C3DTCN.tcn_batch(batch, tcn, cuda)
 
-            num_correct += (batch_positive < batch_negative).data.cpu().numpy().sum()
+            loss = torch.clamp(margin + batch_positive - batch_negative, min=0.0).mean()
+            num_correct += (loss <= 0.0).data.cpu().numpy().sum()
 
-            del batch_positive, batch_negative
+            del batch_positive, batch_negative, loss
             torch.cuda.empty_cache()
             gc.collect()
-
-
 
         loss_validation = (1.0 - float(num_correct) / len(dataset))
 
@@ -170,22 +166,23 @@ class C3DTCN(nn.Module):
     def train_tcn(tcn_settings, verbose=False):
         cuda = torch.cuda.is_available()
 
-        transform = transforms.Compose([transforms.CenterCrop(224), transforms.Resize(112), transforms.ToTensor()])
+        transform = transforms.Compose([transforms.CenterCrop(224), transforms.Resize(56), transforms.ToTensor()])
 
         training_collections = tcn_settings["training_collections"].split(",")
         path = os.path.abspath("./")
 
-        training = IXMASDataset(path, training_collections, transform=transform, verbose=verbose)
+        training = IXMASDataset(path, training_collections, transform=transform, verbose=False)
         training.set_triplet_flag(True)
 
         validation_collection = tcn_settings["validation_collection"]
-        validation = IXMASDataset(path, [validation_collection], transform=transform, verbose=verbose)
+        validation = IXMASDataset(path, [validation_collection], transform=transform, verbose=False)
         validation.set_triplet_flag(True)
 
         learning = float(tcn_settings["learning"])
         momentum = float(tcn_settings["momentum"])
         batch_size = int(tcn_settings["batch"])
         epochs = int(tcn_settings["epochs"])
+        margin = float(tcn_settings["margin"])
 
         print("-----Starting TCN Training-----")
         data_loader = DataLoader(
@@ -201,7 +198,7 @@ class C3DTCN(nn.Module):
             tcn = tcn.cuda()
 
         optimizer = optim.SGD(tcn.parameters(), lr=learning, momentum=momentum)
-        learning_rate_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[5, 10, 15], gamma=0.1)
+        learning_rate_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[5, 15, 20], gamma=0.1)
 
         historical = []
         accuracy = []
@@ -217,10 +214,12 @@ class C3DTCN(nn.Module):
 
                 batch_positive, batch_negative = C3DTCN.tcn_batch(batch, tcn, cuda)
 
-                loss = torch.clamp(2.0 + batch_positive - batch_negative, min=0.0).mean()
+                loss = torch.clamp(margin + batch_positive - batch_negative, min=0.0).mean()
 
                 loss_data = loss.data.cpu().numpy()[0]
                 if verbose:
+                    print("\tPositive Distance: " + str(batch_positive.data.cpu().numpy()[0]))
+                    print("\tNegative Distance: " + str(batch_negative.data.cpu().numpy()[0]))
                     print("\tLoss: " + str(loss_data))
                 losses.append(loss_data)
 
@@ -245,18 +244,19 @@ class C3DTCN(nn.Module):
             total_time += end_time
             print("\tEpoch Time:{}".format(timedelta(seconds=end_time)))
 
-        x = [i for i in range(0, epochs)]
-        plt.title("Iterations vs Distance Loss")
-        plt.xlabel("Iterations")
-        plt.ylabel("Distance Loss")
-        plt.plot(x, historical, marker='o')
-        plt.show()
+            if i+1 % 5 == 0 and i != 0:
+                x = [j for j in range(0, i+1)]
+                plt.title("Iterations vs Average Distance Loss")
+                plt.xlabel("Iterations")
+                plt.ylabel("Distance Loss")
+                plt.plot(x, historical, marker='o')
+                plt.show()
 
-        plt.title("Iterations vs Validation Loss")
-        plt.xlabel("Iterations")
-        plt.ylabel("Validation Loss")
-        plt.plot(x, accuracy, marker='o')
-        plt.show()
+                plt.title("Iterations vs Validation Loss")
+                plt.xlabel("Iterations")
+                plt.ylabel("Validation Loss")
+                plt.plot(x, accuracy, marker='o')
+                plt.show()
 
         print("Total Time: {}".format(timedelta(seconds=total_time)))
         print("----Completed TCN Training-----")

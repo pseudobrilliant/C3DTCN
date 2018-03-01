@@ -35,7 +35,7 @@ class IXMASDataset(Dataset):
             raise ValueError("Collections available did not verify")
 
     def __len__(self):
-        return len(self.clips)
+        return len(self.clips) - (len(self.clips) % 16)
 
     def __getitem__(self, index):
         clip = self.clips[index]
