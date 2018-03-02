@@ -63,6 +63,7 @@ class IXMASDataset(Dataset):
                 if os.path.isdir(os.path.join(dataset_path, cur_dir)) and "png" in cur_dir:
                     name = re.search("(.*)_png", cur_dir).group(1)
                     path = os.path.join(dataset_path, *[cur_dir, name + "_truth.txt"])
+
                     if os.path.exists(path) and name in collection:
                         found += 1
 
