@@ -39,14 +39,14 @@ class C3DTCN(nn.Module):
 
         self.conv5a = nn.Conv3d(512, 512, kernel_size=(3, 3, 3), padding=(1, 1, 1))
         self.conv5b = nn.Conv3d(512, 512, kernel_size=(3, 3, 3), padding=(1, 1, 1))
-        self.pool5 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        self.pool5 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2), padding=(0, 1, 1))
 
-        self.fc1 = nn.Linear(8192, 4096)
-        self.fc2 = nn.Linear(4096, 4096)
-        self.fc3 = nn.Linear(4096, 512)
+        self.fc6 = nn.Linear(8192, 4096)
+        self.fc7 = nn.Linear(4096, 4096)
+        self.fc8 = nn.Linear(4096, 32)
 
-        self.relu = nn.ReLU()
         self.dropout = nn.Dropout(p=0.5)
+        self.relu = nn.ReLU()
 
         self.is_cuda = torch.cuda.is_available()
 
@@ -73,32 +73,32 @@ class C3DTCN(nn.Module):
 
     def forward(self, x):
 
-        layer_result = self.relu(self.conv1(x))
-        layer_result = self.pool1(layer_result)
+        layer = self.relu(self.conv1(x))
+        layer = self.pool1(layer)
 
-        layer_result = self.relu(self.conv2(layer_result))
-        layer_result = self.pool2(layer_result)
+        layer = self.relu(self.conv2(layer))
+        layer = self.pool2(layer)
 
-        layer_result = self.relu(self.conv3a(layer_result))
-        layer_result = self.relu(self.conv3b(layer_result))
-        layer_result = self.pool3(layer_result)
+        layer = self.relu(self.conv3a(layer))
+        layer = self.relu(self.conv3b(layer))
+        layer = self.pool3(layer)
 
-        layer_result = self.relu(self.conv4a(layer_result))
-        layer_result = self.relu(self.conv4b(layer_result))
-        layer_result = self.pool4(layer_result)
+        layer = self.relu(self.conv4a(layer))
+        layer = self.relu(self.conv4b(layer))
+        layer = self.pool4(layer)
 
-        layer_result = self.relu(self.conv5a(layer_result))
-        layer_result = self.relu(self.conv5b(layer_result))
-        layer_result = self.pool5(layer_result)
+        layer = self.relu(self.conv5a(layer))
+        layer = self.relu(self.conv5b(layer))
+        layer = self.pool5(layer)
 
-        layer_result = layer_result.view(-1, 8192)
-        layer_result = self.relu(self.fc1(layer_result))
-        layer_result = self.dropout(layer_result)
-        layer_result = self.relu(self.fc2(layer_result))
-        layer_result = self.dropout(layer_result)
-        layer_result = self.relu(self.fc3(layer_result))
+        layer = layer.view(-1, 8192)
+        layer = self.relu(self.fc6(layer))
+        layer = self.dropout(layer)
+        layer = self.relu(self.fc7(layer))
+        layer = self.dropout(layer)
+        layer = self.fc8(layer)
 
-        return layer_result
+        return layer
 
     def c3d_pretrained_weights(self):
         if not os.path.exists("./dataset/c3d.pickle"):
@@ -107,10 +107,6 @@ class C3DTCN(nn.Module):
             print("-----Completed C3D Pretrained Weights-----")
 
         pretrained = load("./dataset/c3d.pickle")
-        pretrained.pop("fc6.weight")
-        pretrained.pop("fc6.bias")
-        pretrained.pop("fc7.weight")
-        pretrained.pop("fc7.bias")
         pretrained.pop("fc8.weight")
         pretrained.pop("fc8.bias")
 
@@ -183,7 +179,7 @@ class C3DTCN(nn.Module):
 
             batch_positive, batch_negative = self.tcn_batch(batch)
 
-            loss = torch.clamp(self.margin + batch_positive - batch_negative, min=0.0).mean()
+            loss = torch.clamp(self.margin + batch_positive - batch_negative, min=0.0)
             num_correct += (loss <= 0.0).data.cpu().numpy().sum()
             total += batch.size(0)
 
@@ -196,7 +192,7 @@ class C3DTCN(nn.Module):
         return loss_validation
 
     def train(self):
-        transform = transforms.Compose([transforms.CenterCrop(224), transforms.Resize(56), transforms.ToTensor()])
+        transform = transforms.Compose([transforms.CenterCrop(224), transforms.Resize(112), transforms.ToTensor()])
         path = os.path.abspath("./")
 
         training = IXMASDataset(path, self.training_collections, transform=transform, verbose=False)

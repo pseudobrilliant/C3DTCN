@@ -16,6 +16,8 @@ def main():
     tcn = C3DTCN(tcn_settings, verbose=verbosity)
     cnet = ClassNet(cnet_settings, tcn,  verbose=verbosity)
 
+    testing_collections = cnet_settings["testing"].split(',')
+    cnet.test(testing_collections)
 
 if __name__ == '__main__':
     main()
