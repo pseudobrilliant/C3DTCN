@@ -49,7 +49,7 @@ class IXMASDataset(Dataset):
                                                                            clip.frame_paths[1][0]))
             return clip.get_triplet(self._num_frames, negative, self.transform)
         else:
-            return clip.get_single(self._num_frames, self.transform)
+            return (clip.get_single(self._num_frames, self.transform), clip.label)
 
     def set_triplet_flag(self, flag):
         self.is_triplets = flag
@@ -148,7 +148,7 @@ class IXMASDataset(Dataset):
                     for j in range(0, self._views):
                         for k in range(0, self._views):
                             if j != k:
-                                multi_clip.append(IXMASMulticlip(path, name, current_class, j,k))
+                                multi_clip.append(IXMASMulticlip(path, name, current_class, j, k))
 
                 # For each combination of views we insert a new entry into our array of clips
                 for j in range(len(multi_clip)):
@@ -229,12 +229,15 @@ class IXMASMulticlip:
     def get_negative(self, num_frames, transform=None):
         index = self.get_start_index(num_frames)
         negative = self.get_subclip(0, num_frames, index, transform)
+
         return negative
 
     def get_single(self, num_frames, transform=None):
         index = self.get_start_index(num_frames)
         cam = random.randint(0, 1)
-        return self.get_subclip(cam, num_frames, index, transform)
+        clip = self.get_subclip(cam, num_frames, index, transform)
+        clip = clip.squeeze()
+        return clip
 
     def get_subclip(self, view, num_frames, frame_start, transform=None):
         frame_set = self.frame_paths[view][frame_start:frame_start + num_frames]
