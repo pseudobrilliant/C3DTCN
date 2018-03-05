@@ -4,12 +4,12 @@ import torch
 import random
 import shutil
 import tarfile
-import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from torch.utils.data import Dataset
 from torchvision import transforms
 from PIL import Image
 from .util import download_url
+import numpy as np
 
 
 class IXMASDataset(Dataset):
@@ -146,21 +146,21 @@ class IXMASDataset(Dataset):
                 truth_val = int(truth_values[i])
                 if truth_val != current_class:
 
+                    current_class = truth_val
+
                     if multi_clip is not None and multi_clip[0].frame_depth > self._num_frames:
                         action_totals = np.sum(action_counter)
                         if action_totals == 0 or (action_counter[truth_val]) / action_totals < 0.10:
                             clips.extend(multi_clip)
                             action_counter[truth_val] += 1
 
-                    current_class = truth_val
-
                     multi_clip = []
                     # Creates an array of clips containing all the combinations of views for the new label
                     for j in range(0, self._views):
-                        cams = [0, 0]
-                        while cams[0] == cams[1]:
-                            cams = random.randint(0, self._views, size=2)
-                        multi_clip.append(IXMASMulticlip(path, name, current_class, cams[0], cams[1]))
+                        cam = j
+                        while cam == j:
+                            cam = random.randint(0, self._views-1)
+                        multi_clip.append(IXMASMulticlip(path, name, current_class, j, cam))
 
                 # For each combination of views we insert a new entry into our array of clips
                 for j in range(len(multi_clip)):
