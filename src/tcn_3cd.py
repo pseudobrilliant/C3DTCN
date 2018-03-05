@@ -14,6 +14,7 @@ from torchvision import transforms
 import numpy as np
 from .util import download_url
 from .util import euclidean
+from .util import get_config_list
 from .ixmas_dataset import IXMASDataset
 from datetime import timedelta
 
@@ -52,21 +53,22 @@ class C3DTCN(nn.Module):
 
         self.verbose = verbose
         self.training = tcn_settings.getboolean("train")
+
+        self.pretrain = tcn_settings.getboolean("c3d_pretrained")
+
+        if self.pretrain:
+            self.c3d_pretrained_weights()
+
         if self.training:
-            self.training_collections = tcn_settings["training_collections"].split(",")
-            self.validation_collection = [tcn_settings["validation_collection"]]
+            self.training_collections = get_config_list(tcn_settings["training_collections"])
+            self.validation_collection = get_config_list(tcn_settings["validation_collection"])
             self.learning = float(tcn_settings["learning"])
             self.frames = int(tcn_settings["num_frames"])
             self.momentum = float(tcn_settings["momentum"])
             self.batch_size = int(tcn_settings["batch"])
             self.epochs = int(tcn_settings["epochs"])
             self.margin = float(tcn_settings["margin"])
-            self.pretrain = tcn_settings.getboolean("c3d_pretrained")
-
-            if self.pretrain:
-                self.c3d_pretrained_weights()
-
-            self.train()
+            self.train_tcn()
         else:
             self.saved_model = tcn_settings["saved_model"]
             self.load_tcn()
@@ -114,7 +116,7 @@ class C3DTCN(nn.Module):
         new_params.update(pretrained)
         self.load_state_dict(new_params)
 
-    def save_model(self, temp_epoch=None):
+    def save_model(self, temp_epoch=None, name="tcn"):
         if not os.path.exists("./saves"):
             os.mkdir("./saves")
 
@@ -127,7 +129,7 @@ class C3DTCN(nn.Module):
         margin_string = str(self.margin)
         margin_string = margin_string[margin_string.find('.') + 1:]
 
-        filename = "tcn_epochs_{}_batch_{}_frames_{}_learning_{}_margin_{}.pt".format(temp_epoch, self.batch_size,
+        filename = "{}_epochs_{}_batch_{}_frames_{}_learning_{}_margin_{}.pt".format(name, temp_epoch, self.batch_size,
                                                                                       self.frames, learning_string,
                                                                                       margin_string)
 
@@ -161,7 +163,9 @@ class C3DTCN(nn.Module):
 
         return positive_distance, negative_distance
 
-    def validate(self, dataset):
+    def validate_tcn(self, dataset):
+
+        self.eval()
 
         data_loader = DataLoader(
             dataset=dataset,
@@ -191,7 +195,7 @@ class C3DTCN(nn.Module):
 
         return loss_validation
 
-    def train(self):
+    def train_tcn(self):
         transform = transforms.Compose([transforms.CenterCrop(224), transforms.Resize(112), transforms.ToTensor()])
         path = os.path.abspath("./")
 
@@ -200,6 +204,8 @@ class C3DTCN(nn.Module):
 
         validation = IXMASDataset(path, self.validation_collection, transform=transform, verbose=False)
         validation.set_triplet_flag(True)
+
+        self.train()
 
         print("-----Starting TCN Training-----")
         data_loader = DataLoader(
@@ -250,7 +256,7 @@ class C3DTCN(nn.Module):
             print("\tDistance Loss: " + str(mean_loss))
             historical.append(mean_loss)
 
-            val_loss = self.validate(validation)
+            val_loss = self.validate_tcn(validation)
             print("\tValidation Loss: " + str(val_loss))
             accuracy.append(val_loss)
 
@@ -278,5 +284,92 @@ class C3DTCN(nn.Module):
         print("Total Time: {}".format(timedelta(seconds=total_time)))
         print("----Completed TCN Training-----")
 
+    def train_c3d(self):
+        transform = transforms.Compose([transforms.CenterCrop(224), transforms.Resize(112), transforms.ToTensor()])
+        path = os.path.abspath("./")
 
+        training = IXMASDataset(path, self.training_collections, transform=transform, verbose=False)
+        training.set_triplet_flag(True)
+
+        validation = IXMASDataset(path, self.validation_collection, transform=transform, verbose=False)
+        validation.set_triplet_flag(True)
+
+        self.train()
+
+        print("-----Starting C3D Training-----")
+        data_loader = DataLoader(
+            dataset=training,
+            batch_size=self.batch_size,
+            shuffle=True,
+            pin_memory=self.is_cuda
+        )
+
+        if self.is_cuda:
+            self.cuda()
+
+        optimizer = optim.SGD(self.parameters(), lr=self.learning, momentum=self.momentum)
+        learning_rate_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[15, 25, 35], gamma=0.1)
+
+        historical = []
+        accuracy = []
+        total_time = 0
+
+        for i in range(self.epochs):
+            print("Epoch {}:".format(i))
+            start_time = time.time()
+            losses = []
+            learning_rate_scheduler.step()
+
+            for batch in data_loader:
+
+                batch_positive, batch_negative = self.tcn_batch(batch)
+
+                loss = torch.clamp(self.margin + batch_positive - batch_negative, min=0.0).mean()
+
+                loss_data = loss.data.cpu().numpy()[0]
+                if self.verbose:
+                    print("\tPositive Distance: " + str(batch_positive.data.cpu().numpy()[0]))
+                    print("\tNegative Distance: " + str(batch_negative.data.cpu().numpy()[0]))
+                    print("\tLoss: " + str(loss_data))
+                losses.append(loss_data)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                del loss, batch_positive, batch_negative
+                torch.cuda.empty_cache()
+                gc.collect()
+
+            mean_loss = np.mean(losses)
+            print("\tDistance Loss: " + str(mean_loss))
+            historical.append(mean_loss)
+
+            val_loss = self.validate_tcn(validation)
+            print("\tValidation Loss: " + str(val_loss))
+            accuracy.append(val_loss)
+
+            end_time = time.time() - start_time
+            total_time += end_time
+            print("\tEpoch Time:{}".format(timedelta(seconds=end_time)))
+
+            next_epoch = i + 1
+            if next_epoch % 5 == 0 and next_epoch != 0:
+                self.save_model(temp_epoch=next_epoch)
+
+                x = [j for j in range(0, next_epoch)]
+                plt.title("Iterations vs Average Distance Loss")
+                plt.xlabel("Iterations")
+                plt.ylabel("Distance Loss")
+                plt.plot(x, historical, marker='o')
+                plt.show()
+
+                plt.title("Iterations vs Validation Loss")
+                plt.xlabel("Iterations")
+                plt.ylabel("Validation Loss")
+                plt.plot(x, accuracy, marker='o')
+                plt.show()
+
+        print("Total Time: {}".format(timedelta(seconds=total_time)))
+        print("----Completed TCN Training-----")
 

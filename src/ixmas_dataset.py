@@ -4,6 +4,7 @@ import torch
 import random
 import shutil
 import tarfile
+import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -21,6 +22,10 @@ class IXMASDataset(Dataset):
         self._collections = collections
         self. is_triplets = False
         self._verbose = verbose
+
+        self.labels = ("nothing", "check watch", "cross arms", "scratch head", "sit down", "get up", "turn around",
+                       "walk", "wave", "punch", "kick", "point", "pick up", "throw (over head)",
+                       "throw (from bottom up)")
 
         if collections is None:
             raise ValueError("Collection not provided for dataset")
@@ -117,6 +122,7 @@ class IXMASDataset(Dataset):
         print("-----Reading Dataset-----")
 
         clips = []
+        action_counter = [0 for i in range(len(self.labels))]
         dataset_path = os.path.join(self.root, "dataset/")
 
         paths = []
@@ -136,26 +142,40 @@ class IXMASDataset(Dataset):
 
             current_class = -1
             multi_clip = None
-            for i in range(len(truth_values)):
-                if truth_values[i] != current_class:
-                    current_class = truth_values[i]
+            for i in range(len(truth_values)-1):
+                truth_val = int(truth_values[i])
+                if truth_val != current_class:
 
                     if multi_clip is not None and multi_clip[0].frame_depth > self._num_frames:
-                        clips.extend(multi_clip)
+                        action_totals = np.sum(action_counter)
+                        if action_totals == 0 or (action_counter[truth_val]) / action_totals < 0.10:
+                            clips.extend(multi_clip)
+                            action_counter[truth_val] += 1
+
+                    current_class = truth_val
 
                     multi_clip = []
                     # Creates an array of clips containing all the combinations of views for the new label
                     for j in range(0, self._views):
-                        for k in range(0, self._views):
-                            if j != k:
-                                multi_clip.append(IXMASMulticlip(path, name, current_class, j, k))
+                        cams = [0, 0]
+                        while cams[0] == cams[1]:
+                            cams = random.randint(0, self._views, size=2)
+                        multi_clip.append(IXMASMulticlip(path, name, current_class, cams[0], cams[1]))
 
                 # For each combination of views we insert a new entry into our array of clips
                 for j in range(len(multi_clip)):
                     multi_clip[j].add_frame(path, i)
 
         print("Successfully created {} samples from {} collections and {} actions.".format(len(clips),
-                                                                                          len(self._collections), 13))
+                                                                                          len(self._collections), np.sum(action_counter)))
+        action_report = "Actions Included: \n"
+        for i in range(len(self.labels)):
+            action_report += "{}: {} ".format(self.labels[i], action_counter[i])
+            if (i+1) % 5 == 0:
+                action_report += "\n"
+
+        print(action_report)
+
         print("-----Completed Dataset-----")
 
         return clips
