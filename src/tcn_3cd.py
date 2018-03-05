@@ -178,12 +178,16 @@ class C3DTCN(nn.Module):
 
         total = 0
         num_correct = 0
+        losses =[]
         for batch in data_loader:
 
             batch_positive, batch_negative = self.tcn_batch(batch)
 
-            loss = torch.clamp(self.margin + batch_positive - batch_negative, min=0.0)
-            num_correct += (loss <= 0.0).data.cpu().numpy().sum()
+            loss = torch.clamp(self.margin + batch_positive - batch_negative, min=0.0).mean()
+
+            loss_data = loss.data.cpu().numpy()[0]
+            losses.append(loss_data)
+            num_correct += ((batch_positive + self.margin) < batch_negative).data.cpu().numpy().sum()
             total += batch.size(0)
 
             del batch_positive, batch_negative, loss
@@ -192,7 +196,7 @@ class C3DTCN(nn.Module):
 
         loss_validation = (1.0 - (float(num_correct) / total))
 
-        return loss_validation
+        return loss_validation, np.mean(losses)
 
     def train(self):
         transform = transforms.Compose([transforms.CenterCrop(224), transforms.Resize(112), transforms.ToTensor()])
@@ -215,7 +219,7 @@ class C3DTCN(nn.Module):
         if self.is_cuda:
             self.cuda()
 
-        optimizer = optim.Adam(self.parameters(), lr=self.learning)
+        optimizer = optim.SGD(self.parameters(), lr=self.learning, momentum=self.momentum)
 
         historical = []
         accuracy = []
@@ -251,7 +255,7 @@ class C3DTCN(nn.Module):
             print("\tDistance Loss: " + str(mean_loss))
             historical.append(mean_loss)
 
-            val_loss = self.validate(validation)
+            val_loss, val_dist_loss = self.validate(validation)
             print("\tValidation Loss: " + str(val_loss))
             accuracy.append(val_loss)
 
@@ -263,11 +267,13 @@ class C3DTCN(nn.Module):
             if next_epoch % 5 == 0 and next_epoch != 0:
                 self.save_model(temp_epoch=next_epoch)
 
-                x = [j for j in range(0, next_epoch)]
+                x = [j for j in range(1, next_epoch+1)]
                 plt.title("Iterations vs Average Distance Loss")
                 plt.xlabel("Iterations")
                 plt.ylabel("Distance Loss")
-                plt.plot(x, historical, marker='o')
+                plt.plot(x, historical, marker='o', label="training loss")
+                plt.plot(x, val_dist_loss, marker='o', label="val loss")
+                plt.legend(loc='best')
                 plt.show()
 
                 plt.title("Iterations vs Validation Loss")
