@@ -222,6 +222,7 @@ class C3DTCN(nn.Module):
         optimizer = optim.SGD(self.parameters(), lr=self.learning, momentum=self.momentum)
 
         historical = []
+        val_historical = []
         accuracy = []
         total_time = 0
 
@@ -258,6 +259,7 @@ class C3DTCN(nn.Module):
             val_loss, val_dist_loss = self.validate(validation)
             print("\tValidation Loss: " + str(val_loss))
             accuracy.append(val_loss)
+            val_historical.append(val_dist_loss)
 
             end_time = time.time() - start_time
             total_time += end_time
@@ -272,7 +274,7 @@ class C3DTCN(nn.Module):
                 plt.xlabel("Iterations")
                 plt.ylabel("Distance Loss")
                 plt.plot(x, historical, marker='o', label="training loss")
-                plt.plot(x, val_dist_loss, marker='o', label="val loss")
+                plt.plot(x, val_historical, marker='o', label="val loss")
                 plt.legend(loc='best')
                 plt.show()
 
