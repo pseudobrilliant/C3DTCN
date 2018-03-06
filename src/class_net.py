@@ -19,7 +19,7 @@ import warnings
 
 class ClassNet(nn.Module):
 
-    def __init__(self, cnet_settings, tcn, class_size=13, verbose=False):
+    def __init__(self, cnet_settings, tcn, class_size=15, verbose=False):
         super(ClassNet, self).__init__()
 
         self.class_size = class_size
@@ -52,10 +52,10 @@ class ClassNet(nn.Module):
     def forward(self, layer):
         layer = self.layer1(layer)
         layer = self.relu(layer)
-        layer = self.dropout(layer, 0.5)
+        layer = self.dropout(layer)
         layer = self.layer2(layer)
         layer = self.relu(layer)
-        layer = self.dropout(layer, 0.5)
+        layer = self.dropout(layer)
         layer = self.layer3(layer)
         predictions = self.softmax(layer)
 
@@ -112,8 +112,6 @@ class ClassNet(nn.Module):
             pin_memory=self.is_cuda
         )
 
-        self.eval()
-
         total = 0
         num_correct = 0
         for batch, labels in data_loader:
@@ -134,7 +132,6 @@ class ClassNet(nn.Module):
         transform = transforms.Compose([transforms.CenterCrop(224), transforms.Resize(112), transforms.ToTensor()])
         path = os.path.abspath("./")
 
-        self.train()
 
         training = IXMASDataset(path, self.training_collections, transform=transform, verbose=False)
         training.set_triplet_flag(False)

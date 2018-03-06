@@ -72,7 +72,8 @@ class C3DTCN(nn.Module):
             self.train()
         else:
             self.saved_model = tcn_settings["saved_model"]
-            self.load_tcn()
+            if self.saved_model!="None":
+                self.load_tcn()
 
     def forward(self, x):
 
