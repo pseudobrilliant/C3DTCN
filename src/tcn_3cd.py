@@ -220,6 +220,7 @@ class C3DTCN(nn.Module):
             self.cuda()
 
         optimizer = optim.SGD(self.parameters(), lr=self.learning, momentum=self.momentum)
+        learning_rate_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[15, 30, 50, 100], gamma=0.1)
 
         historical = []
         val_historical = []
@@ -230,6 +231,7 @@ class C3DTCN(nn.Module):
             print("Epoch {}:".format(i))
             start_time = time.time()
             losses = []
+            learning_rate_scheduler.step()
 
             for batch in data_loader:
 
@@ -266,7 +268,7 @@ class C3DTCN(nn.Module):
             print("\tEpoch Time:{}".format(timedelta(seconds=end_time)))
 
             next_epoch = i + 1
-            if next_epoch % 5 == 0 and next_epoch != 0:
+            if next_epoch % 2 == 0 and next_epoch != 0:
                 self.save_model(temp_epoch=next_epoch)
 
                 x = [j for j in range(1, next_epoch+1)]
