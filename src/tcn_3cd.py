@@ -105,7 +105,7 @@ class C3DTCN(nn.Module):
         return h
 
     def c3d_pretrained_weights(self):
-        if not os.path.exists("./dataset/c3d.pickle"):
+        if not os.path.exists("./dataset"):
             os.makedirs("./dataset")
         if not os.path.exists("./dataset/c3d.pickle"):
             print("-----Retrieving C3D Pretrained Weights-----")
