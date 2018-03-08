@@ -2,8 +2,6 @@ numpy
 matplotlib
 ipython[all]
 scikit-image
-patool
-cv2
 torch
 torchvision
 progressbar2

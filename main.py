@@ -18,12 +18,5 @@ def main():
     tcn = C3DTCN(tcn_settings, verbose=verbosity)
     cnet = ClassNet(cnet_settings, tcn,  verbose=verbosity)
 
-    testing_collections = cnet_settings["testing"].split(',')
-    transform = transforms.Compose([transforms.CenterCrop(224), transforms.Resize(112), transforms.ToTensor()])
-    path = os.path.abspath("./")
-    training = IXMASDataset(path, testing_collections, transform=transform, verbose=False)
-    training.set_triplet_flag(False)
-    cnet.test(testing_collections)
-
 if __name__ == '__main__':
     main()

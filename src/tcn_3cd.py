@@ -106,17 +106,20 @@ class C3DTCN(nn.Module):
 
     def c3d_pretrained_weights(self):
         if not os.path.exists("./dataset/c3d.pickle"):
+            os.makedirs("./dataset")
+        if not os.path.exists("./dataset/c3d.pickle"):
             print("-----Retrieving C3D Pretrained Weights-----")
             download_url("https://pseudobrilliant.com/files/c3d.pickle", "./dataset/c3d.pickle")
             print("-----Completed C3D Pretrained Weights-----")
 
-        pretrained = load("./dataset/c3d.pickle")
-        pretrained.pop("fc8.weight")
-        pretrained.pop("fc8.bias")
+        if os.path.exists("./dataset/c3d.pickle"):
+            pretrained = load("./dataset/c3d.pickle")
+            pretrained.pop("fc8.weight")
+            pretrained.pop("fc8.bias")
 
-        new_params = self.state_dict()
-        new_params.update(pretrained)
-        self.load_state_dict(new_params)
+            new_params = self.state_dict()
+            new_params.update(pretrained)
+            self.load_state_dict(new_params)
 
     def save_model(self, temp_epoch=None):
         if not os.path.exists("./saves"):
